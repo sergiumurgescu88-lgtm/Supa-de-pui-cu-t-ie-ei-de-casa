@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { STRATEGIES } from './constants';
 import { Strategy } from './types';
 import StrategyCard from './components/StrategyCard';
@@ -7,12 +7,40 @@ import RiskCalculator from './components/RiskCalculator';
 import MarketSentiment from './components/MarketSentiment';
 import TradingViewWidget from './components/TradingViewWidget';
 import AgentControls from './components/AgentControls';
-import { Terminal, LayoutDashboard, Calculator, Zap, Github, BookOpen, LineChart } from 'lucide-react';
+import OpenTrades from './components/OpenTrades';
+import Settings from './components/Settings';
+import AgentLogs from './components/AgentLogs';
+import { Terminal, LayoutDashboard, Calculator, Zap, Github, BookOpen, LineChart, Settings as SettingsIcon } from 'lucide-react';
+import { MarketType } from './services/binance';
 
 const App: React.FC = () => {
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
-  const [activeView, setActiveView] = useState<'dashboard' | 'calculator' | 'chart'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'calculator' | 'chart' | 'settings'>('dashboard');
   const [filter, setFilter] = useState<'All' | 'Long' | 'Short' | 'Combined'>('All');
+  
+  // API Keys state
+  const [apiKey, setApiKey] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
+  const [marketType, setMarketType] = useState<MarketType>('Futures');
+
+  // Load keys on mount
+  useEffect(() => {
+    const k = localStorage.getItem('binance_api_key');
+    const s = localStorage.getItem('binance_api_secret');
+    const m = localStorage.getItem('binance_market_type') as MarketType;
+    if (k) setApiKey(k);
+    if (s) setApiSecret(s);
+    if (m) setMarketType(m);
+  }, []);
+
+  const handleSaveKeys = (k: string, s: string, m: MarketType) => {
+    setApiKey(k);
+    setApiSecret(s);
+    setMarketType(m);
+    if (k && s) {
+      setActiveView('dashboard');
+    }
+  };
 
   const filteredStrategies = STRATEGIES.filter(s => filter === 'All' || s.type === filter);
 
@@ -53,6 +81,13 @@ const App: React.FC = () => {
             >
               <Calculator className="w-4 h-4" /> Risk Calc
             </button>
+            <button 
+              onClick={() => setActiveView('settings')}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeView === 'settings' ? 'bg-slate-700 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+              title="API Settings"
+            >
+              <SettingsIcon className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </nav>
@@ -65,33 +100,34 @@ const App: React.FC = () => {
             {/* Agent Control Buttons */}
             <AgentControls />
 
-            {/* Top Stats Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <div className="lg:col-span-2 bg-gradient-to-br from-indigo-900/40 to-slate-900 border border-indigo-500/20 rounded-xl p-8 relative overflow-hidden group">
-                <div className="relative z-10">
-                  <h2 className="text-3xl font-bold text-white mb-2">Welcome back, Minu.</h2>
-                  <p className="text-indigo-200 max-w-lg mb-6">
-                    Your trading agent is ready. The market is currently showing mixed signals. 
-                    Recommended strategy for today is <span className="font-bold text-white underline decoration-indigo-500">Smart Combo Score</span> for maximum versatility.
-                  </p>
-                  <button 
-                    onClick={() => {
-                        setFilter('Combined');
-                        const el = document.getElementById('strategies-grid');
-                        el?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-all shadow-lg shadow-indigo-900/50 flex items-center gap-2"
-                  >
-                    <BookOpen className="w-4 h-4" /> View Top Strategy
-                  </button>
-                </div>
-                <div className="absolute right-0 bottom-0 opacity-10 transform translate-x-1/4 translate-y-1/4 group-hover:scale-105 transition-transform duration-700">
-                  <Terminal className="w-64 h-64 text-indigo-400" />
-                </div>
-              </div>
-              
+            {/* Split Row: Market Sentiment & Agent Logs */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
               <MarketSentiment />
+              <AgentLogs />
             </div>
+
+            {/* Welcome Banner (Smaller now) */}
+             <div className="bg-gradient-to-r from-indigo-900/30 to-slate-900 border border-indigo-500/20 rounded-xl p-6 mb-8 flex justify-between items-center">
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-1">Welcome back, Minu.</h2>
+                  <p className="text-indigo-200 text-sm">
+                    {apiKey ? `Connected to Binance ${marketType}. Scanning for opportunities...` : 'Demo Mode Active. Connect API keys in Settings to sync with your personal account.'}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                      setFilter('Combined');
+                      const el = document.getElementById('strategies-grid');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="px-4 py-2 bg-indigo-600/80 hover:bg-indigo-500 text-white rounded-lg font-medium text-sm transition-all shadow-lg flex items-center gap-2"
+                >
+                  <BookOpen className="w-3 h-3" /> View Strategies
+                </button>
+            </div>
+
+            {/* Open Trades Table (Live P&L) */}
+            <OpenTrades apiKey={apiKey} apiSecret={apiSecret} marketType={marketType} />
 
             {/* Filter Tabs */}
             <div className="flex items-center gap-4 mb-6 overflow-x-auto pb-2">
@@ -189,6 +225,10 @@ const App: React.FC = () => {
               </ul>
             </div>
           </div>
+        )}
+
+        {activeView === 'settings' && (
+          <Settings onSave={handleSaveKeys} hasKeys={!!apiKey} />
         )}
 
       </main>
