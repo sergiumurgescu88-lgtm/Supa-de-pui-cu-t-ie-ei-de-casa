@@ -1,0 +1,5 @@
+{
+  "name": "Claude Trading Agent Dashboard",
+  "description": "A professional trading strategy dashboard visualizing Long and Short strategies, including backtest simulations and risk management calculators.",
+  "requestFramePermissions": []
+}
