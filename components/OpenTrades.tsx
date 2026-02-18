@@ -150,20 +150,20 @@ const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType =
   };
 
   return (
-    <div className="bg-surface border border-slate-700 rounded-xl overflow-hidden mb-8">
-      <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+    <div className="bg-surface border border-slate-700 rounded-xl overflow-hidden mb-6 md:mb-8 shadow-md">
+      <div className="p-3 md:p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
         <div className="flex items-center gap-2">
-          {marketType === 'Spot' ? <Wallet className="w-5 h-5 text-purple-400" /> : <Activity className="w-5 h-5 text-blue-400" />}
-          <h3 className="font-bold text-slate-100">
-            {isApiMode ? `Binance ${marketType} Assets` : 'Simulated Open Trades'}
+          {marketType === 'Spot' ? <Wallet className="w-4 h-4 md:w-5 md:h-5 text-purple-400" /> : <Activity className="w-4 h-4 md:w-5 md:h-5 text-blue-400" />}
+          <h3 className="font-bold text-sm md:text-base text-slate-100">
+            {isApiMode ? `Binance ${marketType}` : 'Active Trades'}
           </h3>
-          <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-xs font-bold border border-blue-500/20">
-            {trades.length} {marketType === 'Spot' ? 'ASSETS' : 'ACTIVE'}
+          <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[10px] md:text-xs font-bold border border-blue-500/20">
+            {trades.length}
           </span>
         </div>
-        <div className="flex items-center gap-2 text-xs font-mono">
-           <span className={`w-2 h-2 rounded-full ${wsStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
-           <span className="text-slate-500">{wsStatus === 'connected' ? 'LIVE DATA' : 'OFFLINE'}</span>
+        <div className="flex items-center gap-2 text-[10px] md:text-xs font-mono">
+           <span className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${wsStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+           <span className="text-slate-500 hidden sm:inline">{wsStatus === 'connected' ? 'LIVE DATA' : 'OFFLINE'}</span>
         </div>
       </div>
 
@@ -175,23 +175,23 @@ const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType =
 
       <div className="overflow-x-auto">
         {trades.length === 0 ? (
-           <div className="p-8 text-center text-slate-500 text-sm">
+           <div className="p-6 md:p-8 text-center text-slate-500 text-xs md:text-sm">
              {isApiMode ? `No ${marketType} positions found.` : 'No active trades.'}
            </div>
         ) : (
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[350px]">
             <thead>
-              <tr className="bg-slate-900/50 text-xs uppercase text-slate-500 font-mono tracking-wider border-b border-slate-700">
-                <th className="px-4 py-3 font-medium">Asset/Pair</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                {marketType !== 'Spot' && <th className="px-4 py-3 font-medium text-right">Entry</th>}
-                <th className="px-4 py-3 font-medium text-right">Market Price</th>
-                <th className="px-4 py-3 font-medium text-right">{marketType === 'Spot' ? 'Balance' : 'Margin / Lev'}</th>
-                <th className="px-4 py-3 font-medium text-right">{marketType === 'Spot' ? 'Total Value' : 'Unrealized P&L'}</th>
-                <th className="px-4 py-3 font-medium text-center">Action</th>
+              <tr className="bg-slate-900/50 text-[10px] md:text-xs uppercase text-slate-500 font-mono tracking-wider border-b border-slate-700">
+                <th className="px-3 py-2 md:px-4 md:py-3 font-medium">Pair</th>
+                <th className="px-3 py-2 md:px-4 md:py-3 font-medium text-right hidden sm:table-cell">Type</th>
+                {marketType !== 'Spot' && <th className="px-3 py-2 md:px-4 md:py-3 font-medium text-right hidden md:table-cell">Entry</th>}
+                <th className="px-3 py-2 md:px-4 md:py-3 font-medium text-right">Price</th>
+                <th className="px-3 py-2 md:px-4 md:py-3 font-medium text-right hidden lg:table-cell">{marketType === 'Spot' ? 'Balance' : 'Margin'}</th>
+                <th className="px-3 py-2 md:px-4 md:py-3 font-medium text-right">P&L</th>
+                <th className="px-3 py-2 md:px-4 md:py-3 font-medium text-center">X</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-700/50 text-sm">
+            <tbody className="divide-y divide-slate-700/50 text-xs md:text-sm">
               {trades.map(trade => {
                 const currentPrice = prices[trade.pair] || trade.entry || 0;
                 const { pnlValue, pnlPercent, isSpot } = calculatePnL(trade, currentPrice);
@@ -199,11 +199,17 @@ const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType =
 
                 return (
                   <tr key={trade.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-4 py-3 font-bold text-slate-200">
-                      {trade.pair}
+                    <td className="px-3 py-2 md:px-4 md:py-3 font-bold text-slate-200">
+                      <div className="flex flex-col">
+                        <span>{trade.pair}</span>
+                        {/* Mobile Type Indicator */}
+                        <span className={`sm:hidden text-[9px] font-normal ${trade.type === 'Long' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                           {trade.type} {trade.leverage}x
+                        </span>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded w-fit ${
+                    <td className="px-3 py-2 md:px-4 md:py-3 text-right hidden sm:table-cell">
+                      <span className={`inline-flex items-center gap-1 text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded ${
                         trade.type === 'Long' 
                         ? 'bg-emerald-500/10 text-emerald-400' 
                         : 'bg-rose-500/10 text-rose-400'
@@ -214,42 +220,38 @@ const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType =
                     </td>
                     
                     {!isSpot && (
-                      <td className="px-4 py-3 text-right font-mono text-slate-400">
-                        ${trade.entry.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      <td className="px-3 py-2 md:px-4 md:py-3 text-right font-mono text-slate-400 hidden md:table-cell">
+                        ${trade.entry.toLocaleString(undefined, { minimumFractionDigits: 0 })}
                       </td>
                     )}
 
-                    <td className={`px-4 py-3 text-right font-mono font-bold ${
-                      currentPrice > trade.entry ? 'text-slate-200' : 'text-slate-200'
-                    }`}>
-                      ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    <td className="px-3 py-2 md:px-4 md:py-3 text-right font-mono text-slate-200">
+                      ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1 })}
                     </td>
                     
-                    <td className="px-4 py-3 text-right font-mono text-slate-400">
+                    <td className="px-3 py-2 md:px-4 md:py-3 text-right font-mono text-slate-400 hidden lg:table-cell">
                       {isSpot 
                         ? (trade.amount || 0).toFixed(4)
-                        : <span>${Math.floor(trade.size)} <span className="text-slate-600">x{trade.leverage}</span></span>
+                        : <span>${Math.floor(trade.size)}</span>
                       }
                     </td>
 
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-2 md:px-4 md:py-3 text-right">
                       <div className={`font-bold font-mono ${isSpot ? 'text-slate-200' : (isProfit ? 'text-emerald-400' : 'text-rose-400')}`}>
-                         {/* For Spot, pnlValue is just Value */}
-                         {isSpot ? '' : (isProfit ? '+' : '')}{pnlValue.toFixed(2)} USDT
+                         {isSpot ? '' : (isProfit ? '+' : '')}{pnlValue.toFixed(1)}
                       </div>
                       {!isSpot && (
-                        <div className={`text-xs ${isProfit ? 'text-emerald-500/70' : 'text-rose-500/70'}`}>
-                          ({isProfit ? '+' : ''}{pnlPercent.toFixed(2)}%)
+                        <div className={`text-[10px] ${isProfit ? 'text-emerald-500/70' : 'text-rose-500/70'}`}>
+                          {pnlPercent.toFixed(1)}%
                         </div>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-3 py-2 md:px-4 md:py-3 text-center">
                       <button 
                         onClick={() => closeTrade(trade.id)}
-                        className="p-2 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 rounded-lg transition-colors group"
-                        title={isSpot ? "Sell Asset" : "Close Position"}
+                        className="p-1.5 md:p-2 hover:bg-rose-500/20 text-slate-500 hover:text-rose-400 rounded-lg transition-colors group"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3 h-3 md:w-4 md:h-4" />
                       </button>
                     </td>
                   </tr>

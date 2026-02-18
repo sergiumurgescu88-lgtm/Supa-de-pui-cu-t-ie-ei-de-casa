@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { createChart, ColorType, CrosshairMode, ISeriesApi, IChartApi, LineStyle, UTCTimestamp } from 'lightweight-charts';
-import { ArrowUp, ArrowDown, Activity, Layers, Settings, RefreshCw, Wifi, TrendingUp, TrendingDown } from 'lucide-react';
+import { ArrowUp, ArrowDown, Activity, Layers, Settings, RefreshCw, Wifi, TrendingUp, TrendingDown, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface CandleData {
   time: number; // UNIX timestamp in seconds
@@ -166,6 +166,7 @@ const TradingViewWidget: React.FC = () => {
   const [lastSignal, setLastSignal] = useState<'buy' | 'sell' | 'none'>('none');
   const [isConnected, setIsConnected] = useState(false);
   const [activeStrategy, setActiveStrategy] = useState<StrategyMode>('Combined');
+  const [isStatsExpanded, setIsStatsExpanded] = useState(true); // Default open on desktop
   
   const [indicators, setIndicators] = useState<IndicatorState>({
     sma: false,
@@ -174,6 +175,13 @@ const TradingViewWidget: React.FC = () => {
     macd: false,
     rsi: false
   });
+
+  // Mobile check to auto-collapse on small screens
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setIsStatsExpanded(false);
+    }
+  }, []);
 
   // 1. Initialize Chart
   useEffect(() => {
@@ -189,7 +197,7 @@ const TradingViewWidget: React.FC = () => {
         horzLines: { color: '#1e293b' },
       },
       width: chartContainerRef.current.clientWidth,
-      height: 600,
+      height: chartContainerRef.current.clientHeight, // Use dynamic height
       crosshair: { mode: CrosshairMode.Normal },
       timeScale: { borderColor: '#1e293b', timeVisible: true },
       rightPriceScale: { borderColor: '#1e293b' },
@@ -208,7 +216,10 @@ const TradingViewWidget: React.FC = () => {
 
     const handleResize = () => {
       if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth });
+        chart.applyOptions({ 
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight
+        });
       }
     };
 
@@ -467,96 +478,88 @@ const TradingViewWidget: React.FC = () => {
   };
 
   return (
-    <div className="relative">
-        {/* Active Strategy Selector Overlay */}
-        <div className="absolute top-4 left-4 z-10 flex flex-col gap-2">
+    <div className="relative group">
+        {/* Active Strategy Selector Overlay - Collapsible on Mobile */}
+        <div className="absolute top-2 left-2 md:top-4 md:left-4 z-10 flex flex-col gap-2 max-w-[200px] md:max-w-none transition-all">
            {/* Strategy Stats Panel */}
-           <div className="bg-slate-900/80 backdrop-blur-md border border-slate-700 p-4 rounded-lg shadow-lg">
-              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-700">
-                  <Activity className="w-4 h-4 text-blue-400" />
-                  <h3 className="text-sm font-bold text-slate-100">Simulated Strategy</h3>
+           <div className={`bg-slate-900/90 backdrop-blur-md border border-slate-700 rounded-lg shadow-lg overflow-hidden transition-all duration-300 ${isStatsExpanded ? 'w-[180px] md:w-auto' : 'w-[40px] md:w-auto h-[40px]'}`}>
+              
+              {/* Header / Toggle */}
+              <div 
+                className="flex items-center justify-between p-2 md:p-4 cursor-pointer hover:bg-slate-800/50"
+                onClick={() => setIsStatsExpanded(!isStatsExpanded)}
+              >
+                  <div className={`flex items-center gap-2 ${!isStatsExpanded ? 'justify-center w-full' : ''}`}>
+                      <Activity className={`w-4 h-4 text-blue-400 ${!isStatsExpanded ? 'w-5 h-5' : ''}`} />
+                      {isStatsExpanded && <h3 className="text-xs md:text-sm font-bold text-slate-100">Sim Strategy</h3>}
+                  </div>
+                  {isStatsExpanded && (
+                      <div className="text-slate-500">
+                          <ChevronUp className="w-3 h-3" />
+                      </div>
+                  )}
               </div>
               
-              {/* Selector */}
-              <div className="flex gap-1 mb-4 bg-slate-800 p-1 rounded-lg">
-                  <button 
-                    onClick={() => setActiveStrategy('LongOnly')}
-                    className={`flex-1 px-3 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-colors ${activeStrategy === 'LongOnly' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    <TrendingUp className="w-3 h-3" /> LONG
-                  </button>
-                  <button 
-                    onClick={() => setActiveStrategy('ShortOnly')}
-                    className={`flex-1 px-3 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-colors ${activeStrategy === 'ShortOnly' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/50' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    <TrendingDown className="w-3 h-3" /> SHORT
-                  </button>
-                  <button 
-                    onClick={() => setActiveStrategy('Combined')}
-                    className={`flex-1 px-3 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-colors ${activeStrategy === 'Combined' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    BOTH
-                  </button>
-              </div>
+              {/* Content (Hidden when collapsed) */}
+              {isStatsExpanded && (
+                <div className="px-2 pb-2 md:px-4 md:pb-4 border-t border-slate-700/50 pt-2">
+                    {/* Selector */}
+                    <div className="flex gap-1 mb-3 bg-slate-800 p-1 rounded-lg">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setActiveStrategy('LongOnly'); }}
+                            className={`flex-1 px-2 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-colors ${activeStrategy === 'LongOnly' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                            L
+                        </button>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setActiveStrategy('ShortOnly'); }}
+                            className={`flex-1 px-2 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-colors ${activeStrategy === 'ShortOnly' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/50' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                            S
+                        </button>
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); setActiveStrategy('Combined'); }}
+                            className={`flex-1 px-2 py-1 text-[10px] font-bold rounded flex items-center justify-center gap-1 transition-colors ${activeStrategy === 'Combined' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/50' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                            All
+                        </button>
+                    </div>
 
-              <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs">
-                  <span className="text-slate-400">Pair</span>
-                  <span className="text-slate-200 font-mono text-right">BTC/USDT</span>
-                  
-                  <span className="text-slate-400">Price</span>
-                  <span className="text-emerald-400 font-mono text-right">
-                      ${currentPrice?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </span>
+                    <div className="grid grid-cols-2 gap-x-2 md:gap-x-8 gap-y-1 text-[10px] md:text-xs">
+                        <span className="text-slate-400">Price</span>
+                        <span className="text-emerald-400 font-mono text-right">
+                            ${currentPrice?.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                        </span>
 
-                  <span className="text-slate-400">Signal</span>
-                  <span className={`font-bold font-mono text-right ${
-                      lastSignal === 'buy' ? 'text-emerald-400' : 
-                      lastSignal === 'sell' ? 'text-rose-400' : 'text-slate-500'
-                  }`}>
-                      {lastSignal.toUpperCase()}
-                  </span>
-              </div>
+                        <span className="text-slate-400">Signal</span>
+                        <span className={`font-bold font-mono text-right ${
+                            lastSignal === 'buy' ? 'text-emerald-400' : 
+                            lastSignal === 'sell' ? 'text-rose-400' : 'text-slate-500'
+                        }`}>
+                            {lastSignal.toUpperCase()}
+                        </span>
+                    </div>
+                </div>
+              )}
            </div>
         </div>
 
-        {/* Tools Toolbar */}
-        <div className="absolute top-4 right-4 z-20 flex gap-2">
-           <button 
-             onClick={() => toggleIndicator('sma')}
-             className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors ${indicators.sma ? 'bg-yellow-500/20 border-yellow-500 text-yellow-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-           >
-             SMA
-           </button>
-           <button 
-             onClick={() => toggleIndicator('ema')}
-             className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors ${indicators.ema ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-           >
-             EMA
-           </button>
-           <button 
-             onClick={() => toggleIndicator('bb')}
-             className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors ${indicators.bb ? 'bg-purple-500/20 border-purple-500 text-purple-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-           >
-             BB
-           </button>
-           <button 
-             onClick={() => toggleIndicator('rsi')}
-             className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors ${indicators.rsi ? 'bg-purple-500/20 border-purple-500 text-purple-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-           >
-             RSI
-           </button>
-           <button 
-             onClick={() => toggleIndicator('macd')}
-             className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors ${indicators.macd ? 'bg-orange-500/20 border-orange-500 text-orange-400' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}
-           >
-             MACD
-           </button>
+        {/* Tools Toolbar - Scrollable on Mobile */}
+        <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20 flex gap-1 md:gap-2 overflow-x-auto max-w-[60%] md:max-w-none scrollbar-hide py-1">
+           {['sma', 'ema', 'bb', 'rsi', 'macd'].map(tool => (
+             <button 
+               key={tool}
+               onClick={() => toggleIndicator(tool as keyof IndicatorState)}
+               className={`px-3 py-1.5 md:px-3 md:py-1.5 rounded-md text-[10px] md:text-xs font-bold border transition-colors whitespace-nowrap shadow-sm backdrop-blur-sm ${indicators[tool as keyof IndicatorState] ? 'bg-blue-500/20 border-blue-500 text-blue-400' : 'bg-slate-900/80 border-slate-700 text-slate-400 hover:bg-slate-800'}`}
+             >
+               {tool.toUpperCase()}
+             </button>
+           ))}
         </div>
 
         <div 
             ref={chartContainerRef} 
-            className="w-full bg-surface border border-slate-700 rounded-xl overflow-hidden shadow-xl" 
-            style={{ height: '600px' }}
+            className="w-full bg-surface border border-slate-700 rounded-xl overflow-hidden shadow-xl h-[400px] md:h-[600px]" 
         />
     </div>
   );

@@ -91,31 +91,31 @@ const AgentLogs: React.FC = () => {
   };
 
   return (
-    <div className="bg-surface border border-slate-700 rounded-xl overflow-hidden flex flex-col h-[320px]">
-      <div className="p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
+    <div className="bg-surface border border-slate-700 rounded-xl overflow-hidden flex flex-col h-[250px] md:h-[320px]">
+      <div className="p-3 md:p-4 border-b border-slate-700 bg-slate-800/50 flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <Terminal className="w-5 h-5 text-indigo-400" />
-          <h3 className="font-bold text-slate-100">AI Agent Neural Feed</h3>
+          <Terminal className="w-4 h-4 md:w-5 md:h-5 text-indigo-400" />
+          <h3 className="font-bold text-sm md:text-base text-slate-100">AI Neural Feed</h3>
         </div>
-        <div className="flex items-center gap-2 text-xs font-mono">
-           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <div className="flex items-center gap-2 text-[10px] md:text-xs font-mono">
+           <span className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-emerald-500 animate-pulse"></span>
            <span className="text-emerald-400">ONLINE</span>
         </div>
       </div>
 
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-2 font-mono text-xs bg-slate-900/50"
+        className="flex-1 overflow-y-auto p-3 md:p-4 space-y-2 font-mono text-[10px] md:text-xs bg-slate-900/50"
       >
         {logs.map((log) => (
-          <div key={log.id} className="flex gap-3 animate-fadeIn hover:bg-slate-800/30 p-1 rounded transition-colors">
-            <span className="text-slate-600 shrink-0 select-none">[{log.time}]</span>
+          <div key={log.id} className="flex gap-2 md:gap-3 animate-fadeIn hover:bg-slate-800/30 p-1 rounded transition-colors">
+            <span className="text-slate-600 shrink-0 select-none hidden sm:inline">[{log.time}]</span>
             <div className={`flex items-center gap-2 ${getTypeColor(log.type)}`}>
               <span className="shrink-0 opacity-70">{getTypeIcon(log.type)}</span>
-              <span className="uppercase tracking-wider font-bold shrink-0 w-20 text-[10px] border border-slate-700/50 rounded px-1 text-center bg-slate-800/50">
+              <span className="uppercase tracking-wider font-bold shrink-0 w-16 md:w-20 text-[9px] md:text-[10px] border border-slate-700/50 rounded px-1 text-center bg-slate-800/50">
                 {log.type}
               </span>
-              <span>{log.message}</span>
+              <span className="break-all">{log.message}</span>
             </div>
           </div>
         ))}
