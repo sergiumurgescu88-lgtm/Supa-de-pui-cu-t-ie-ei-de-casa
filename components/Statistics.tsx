@@ -1,9 +1,53 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { STRATEGIES } from '../constants';
-import { BarChart3, TrendingUp, TrendingDown, Activity, PieChart, Calendar, ArrowUpRight } from 'lucide-react';
+import { BarChart3, TrendingUp, TrendingDown, Activity, Calendar, DollarSign, Percent } from 'lucide-react';
+import { BotTrade } from '../services/freqtrade';
 
-const Statistics: React.FC = () => {
-  // Helper to parse "55-65%" into a number (e.g., 60)
+interface StatisticsProps {
+  botTrades?: BotTrade[];
+}
+
+const Statistics: React.FC<StatisticsProps> = ({ botTrades }) => {
+  
+  // Calculate Daily P&L from real bot trades if available
+  const dailyStats = useMemo(() => {
+    if (!botTrades || botTrades.length === 0) return null;
+
+    const stats: Record<string, number> = {};
+    botTrades.forEach(t => {
+      if (!t.close_date) return;
+      // Format: YYYY-MM-DD
+      const day = t.close_date.split('T')[0] || t.close_date.split(' ')[0]; 
+      stats[day] = (stats[day] || 0) + (t.profit_abs || 0);
+    });
+
+    const sortedDays = Object.keys(stats).sort();
+    const last7Days = sortedDays.slice(-7); // Last 7 days
+
+    return last7Days.map(day => ({
+      day: day.slice(5), // MM-DD
+      val: stats[day],
+      fullDate: day
+    }));
+  }, [botTrades]);
+
+  // Fallback data for demo mode
+  const demoDailyStats = [
+    { day: 'Mon', val: 40, fullDate: 'Monday' },
+    { day: 'Tue', val: -20, fullDate: 'Tuesday' },
+    { day: 'Wed', val: 65, fullDate: 'Wednesday' },
+    { day: 'Thu', val: 30, fullDate: 'Thursday' },
+    { day: 'Fri', val: -15, fullDate: 'Friday' },
+    { day: 'Sat', val: 55, fullDate: 'Saturday' },
+    { day: 'Sun', val: 45, fullDate: 'Sunday' },
+  ];
+
+  const chartData = dailyStats || demoDailyStats;
+  
+  // Find max value for scaling bar height
+  const maxVal = Math.max(...chartData.map(d => Math.abs(d.val))) || 1;
+
+  // Helper to parse "55-65%" into a number (e.g., 60) for Strategy Progress bars
   const getWinRateValue = (rateStr: string) => {
     const nums = rateStr.match(/\d+/g);
     if (!nums) return 0;
@@ -13,7 +57,6 @@ const Statistics: React.FC = () => {
     return parseInt(nums[0]);
   };
 
-  // Sort strategies by efficiency for better visualization
   const sortedStrategies = [...STRATEGIES].sort((a, b) => 
     getWinRateValue(b.winRate) - getWinRateValue(a.winRate)
   );
@@ -21,12 +64,13 @@ const Statistics: React.FC = () => {
   return (
     <div className="animate-fadeIn space-y-6">
       
-      {/* KPI Cards */}
+      {/* KPI Cards (Static or calculated could go here, but main ones are on Dashboard) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-surface border border-slate-700 p-4 md:p-5 rounded-xl">
-          <div className="text-[10px] md:text-xs font-mono text-slate-500 uppercase tracking-wider mb-2">Total Profit</div>
+          <div className="text-[10px] md:text-xs font-mono text-slate-500 uppercase tracking-wider mb-2">Avg Trade</div>
           <div className="text-xl md:text-2xl font-bold text-emerald-400 flex flex-wrap items-end gap-2">
-            +€47.32 <span className="text-xs text-emerald-500/70 mb-1">(+4.73%)</span>
+            <DollarSign className="w-5 h-5 mb-1" />
+            {dailyStats ? (chartData.reduce((acc, curr) => acc + curr.val, 0) / (chartData.length || 1)).toFixed(2) : '1.25'}
           </div>
         </div>
         <div className="bg-surface border border-slate-700 p-4 md:p-5 rounded-xl">
@@ -45,21 +89,61 @@ const Statistics: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
+        {/* Dynamic P&L History Chart */}
+        <div className="bg-surface border border-slate-700 rounded-xl p-4 md:p-6 flex flex-col h-[300px] md:h-auto">
+            <div className="flex items-center justify-between mb-6">
+                <h3 className="text-base md:text-lg font-bold text-slate-100 flex items-center gap-2">
+                    <Calendar className="w-5 h-5 text-blue-400" />
+                    Daily Profit
+                </h3>
+                <span className="text-xs text-slate-500 font-mono">Last {chartData.length} Days</span>
+            </div>
+            
+            <div className="flex-1 flex items-end justify-between gap-2 md:gap-4 px-2 pb-2 h-40 md:h-48">
+                {chartData.length === 0 ? (
+                    <div className="w-full h-full flex items-center justify-center text-slate-500 text-sm">
+                        No closed trades history available.
+                    </div>
+                ) : (
+                    chartData.map((item, i) => (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
+                            {/* Tooltip */}
+                            <div className={`absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap bg-slate-800 text-xs px-2 py-1 rounded border border-slate-700 z-10 font-mono ${item.val >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {item.val > 0 ? '+' : ''}{item.val.toFixed(2)} USDT
+                            </div>
+                            
+                            {/* Bar */}
+                            <div 
+                                className={`w-full rounded-t-sm transition-all duration-500 ${item.val >= 0 ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-rose-500 hover:bg-rose-400'}`}
+                                style={{ 
+                                    height: `${Math.max(5, (Math.abs(item.val) / maxVal) * 100)}%`, 
+                                    minHeight: '4px' 
+                                }}
+                            ></div>
+                            
+                            {/* Label */}
+                            <div className="text-[10px] md:text-xs text-slate-500 font-mono truncate w-full text-center">
+                                {item.day}
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+
         {/* Win Rate Bar Chart */}
         <div className="bg-surface border border-slate-700 rounded-xl p-4 md:p-6">
             <div className="flex items-center justify-between mb-6">
                 <h3 className="text-base md:text-lg font-bold text-slate-100 flex items-center gap-2">
                     <BarChart3 className="w-5 h-5 text-blue-400" />
-                    Strategy Win Rates
+                    Strategy Performance
                 </h3>
-                <span className="text-[10px] md:text-xs text-slate-500 font-mono">AVG</span>
             </div>
             
             <div className="space-y-5">
                 {sortedStrategies.map(strat => {
                     const val = getWinRateValue(strat.winRate);
                     
-                    // Determine styling based on type
                     let colorClass = 'bg-indigo-500';
                     let textClass = 'text-indigo-400';
                     let icon = <Activity className="w-3 h-3" />;
@@ -94,39 +178,6 @@ const Statistics: React.FC = () => {
                         </div>
                     )
                 })}
-            </div>
-        </div>
-
-        {/* P&L History (Placeholder visual) */}
-        <div className="bg-surface border border-slate-700 rounded-xl p-4 md:p-6 flex flex-col h-[300px] md:h-auto">
-            <div className="flex items-center justify-between mb-6">
-                <h3 className="text-base md:text-lg font-bold text-slate-100 flex items-center gap-2">
-                    <Calendar className="w-5 h-5 text-blue-400" />
-                    Daily P&L
-                </h3>
-            </div>
-            
-            <div className="flex-1 flex items-end justify-between gap-2 md:gap-4 px-2 pb-2">
-                {[
-                    { day: 'Mon', val: 40, label: '+€8.2' },
-                    { day: 'Tue', val: -20, label: '-€3.5' },
-                    { day: 'Wed', val: 65, label: '+€11.1' },
-                    { day: 'Thu', val: 30, label: '+€6.2' },
-                    { day: 'Fri', val: -15, label: '-€2.1' },
-                    { day: 'Sat', val: 55, label: '+€9.7' },
-                    { day: 'Sun', val: 45, label: '+€7.5' },
-                ].map((item, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-                        <div className={`text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity ${item.val > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {item.label}
-                        </div>
-                        <div 
-                            className={`w-full rounded-t-sm transition-all duration-500 ${item.val > 0 ? 'bg-emerald-500 hover:bg-emerald-400' : 'bg-rose-500 hover:bg-rose-400'}`}
-                            style={{ height: `${Math.abs(item.val)}%`, minHeight: '4px' }}
-                        ></div>
-                        <div className="text-[10px] md:text-xs text-slate-500 font-mono">{item.day.charAt(0)}</div>
-                    </div>
-                ))}
             </div>
         </div>
 

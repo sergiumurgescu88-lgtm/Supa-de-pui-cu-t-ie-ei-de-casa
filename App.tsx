@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { STRATEGIES } from './constants';
 import { Strategy } from './types';
 import StrategyCard from './components/StrategyCard';
@@ -11,41 +11,170 @@ import OpenTrades from './components/OpenTrades';
 import Settings from './components/Settings';
 import AgentLogs from './components/AgentLogs';
 import Statistics from './components/Statistics';
-import { Terminal, LayoutDashboard, Calculator, Zap, Github, BookOpen, LineChart, Settings as SettingsIcon, PieChart, Menu, X } from 'lucide-react';
+import { Terminal, LayoutDashboard, Calculator, Zap, Github, BookOpen, LineChart, Settings as SettingsIcon, PieChart, Menu, X, Bot, AlertTriangle, ExternalLink, RefreshCw, Copy, ExternalLink as LinkIcon } from 'lucide-react';
 import { MarketType } from './services/binance';
+import { FreqtradeService, BotProfit, BotTrade } from './services/freqtrade';
 
 const App: React.FC = () => {
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
   const [activeView, setActiveView] = useState<'dashboard' | 'calculator' | 'chart' | 'settings' | 'statistics'>('dashboard');
   const [filter, setFilter] = useState<'All' | 'Long' | 'Short' | 'Combined'>('All');
   
-  // API Keys state
+  // Binance Keys state
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
   const [marketType, setMarketType] = useState<MarketType>('Futures');
 
+  // Bot State
+  const [botConfig, setBotConfig] = useState<{url: string, user: string, pass: string, skipNgrokHeader?: boolean} | null>(null);
+  const [botConnected, setBotConnected] = useState(false);
+  const [botError, setBotError] = useState<string | null>(null);
+  const [botService, setBotService] = useState<FreqtradeService | null>(null);
+  const [botProfit, setBotProfit] = useState<BotProfit | null>(null);
+  const [botTrades, setBotTrades] = useState<BotTrade[] | null>(null);
+  const [botBalance, setBotBalance] = useState<number | null>(null);
+  const [botHistory, setBotHistory] = useState<BotTrade[]>([]);
+
   // Load keys on mount
   useEffect(() => {
+    // Binance
     const k = localStorage.getItem('binance_api_key');
     const s = localStorage.getItem('binance_api_secret');
     const m = localStorage.getItem('binance_market_type') as MarketType;
     if (k) setApiKey(k);
     if (s) setApiSecret(s);
     if (m) setMarketType(m);
+
+    // Bot Configuration
+    let bUrl = localStorage.getItem('bot_url');
+    let bUser = localStorage.getItem('bot_user');
+    let bPass = localStorage.getItem('bot_pass');
+    let skipHeader = localStorage.getItem('bot_skip_ngrok_header') === 'true';
+
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const isLocalConfig = !bUrl || bUrl.includes('127.0.0.1') || bUrl.includes('localhost') || bUrl.includes(':5000');
+    
+    // Defined Defaults
+    const defaultUser = 'minu';
+    const defaultPass = 'Nuamparola123@';
+    const defaultUrl = 'https://emmett-telodynamic-daniele.ngrok-free.dev';
+
+    // Auto-correct local config for HTTPS deployment or if using old defaults
+    if ((isHttps && isLocalConfig) || bUser === 'freqtrader') {
+        bUrl = defaultUrl;
+        bUser = defaultUser;
+        // If password is missing or using old default, update it
+        if (!bPass) bPass = defaultPass;
+        
+        localStorage.setItem('bot_url', bUrl);
+        localStorage.setItem('bot_user', bUser);
+        // We don't save password to LS by default for security, but we use it in state
+    }
+
+    if (bUrl && bUser) {
+        // Fallback for password if not in storage
+        const passToUse = bPass || (bUser === defaultUser ? defaultPass : '');
+        setBotConfig({ url: bUrl, user: bUser, pass: passToUse, skipNgrokHeader: skipHeader });
+    } else {
+        setBotConfig({ url: defaultUrl, user: defaultUser, pass: defaultPass, skipNgrokHeader: false });
+    }
   }, []);
+
+  // Initialize Bot Connection
+  useEffect(() => {
+    if (botConfig) {
+        setBotError(null);
+        const service = new FreqtradeService({
+            url: botConfig.url,
+            username: botConfig.user,
+            password: botConfig.pass,
+            skipNgrokHeader: botConfig.skipNgrokHeader
+        });
+        
+        service.login().then(() => {
+            setBotService(service);
+            setBotConnected(true);
+            setBotError(null);
+            console.log("Bot Connected Successfully");
+        }).catch(err => {
+            console.error("Bot Login Failed", err);
+            
+            if (botConfig.url.includes('127.0.0.1') || botConfig.url.includes('localhost')) {
+                const fallbackUrl = 'https://emmett-telodynamic-daniele.ngrok-free.dev';
+                setBotConfig({ ...botConfig, url: fallbackUrl });
+                localStorage.setItem('bot_url', fallbackUrl);
+                return;
+            }
+
+            setBotConnected(false);
+            setBotError(err.message || "Failed to connect to Bot");
+        });
+    }
+  }, [botConfig]);
+
+  // Data Polling
+  useEffect(() => {
+    if (!botService || !botConnected) return;
+
+    const fetchData = async () => {
+        try {
+            const [profit, trades, balance, history] = await Promise.all([
+                botService.getProfit(),
+                botService.getStatus(),
+                botService.getBalance(),
+                botService.getTrades(30)
+            ]);
+
+            setBotProfit(profit);
+            setBotTrades(trades);
+            setBotBalance(balance.total);
+            setBotHistory(history.trades);
+            setBotError(null);
+        } catch (e: any) {
+            console.error("Bot Data Poll Failed", e);
+            if (e.message && e.message.includes("Session Expired")) {
+                setBotConnected(false);
+                // Trigger re-login by resetting config slightly to trigger useEffect
+                if (botConfig) setBotConfig({ ...botConfig });
+            }
+        }
+    };
+
+    fetchData();
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, [botService, botConnected, botConfig]);
 
   const handleSaveKeys = (k: string, s: string, m: MarketType) => {
     setApiKey(k);
     setApiSecret(s);
     setMarketType(m);
-    if (k && s) {
-      setActiveView('dashboard');
-    }
+  };
+
+  const handleSaveBot = (url: string, user: string, pass: string, skipHeader?: boolean) => {
+      setBotConfig({ url, user, pass, skipNgrokHeader: skipHeader });
+  };
+
+  const handleStartBot = async () => {
+      if (botService) {
+          try {
+              await botService.start();
+              alert("Bot Started");
+          } catch(e: any) { alert("Error starting bot: " + e.message); }
+      }
+  };
+
+  const handleStopBot = async () => {
+      if (botService) {
+          try {
+              await botService.stop();
+              alert("Bot Stopped");
+          } catch(e: any) { alert("Error stopping bot: " + e.message); }
+      }
   };
 
   const filteredStrategies = STRATEGIES.filter(s => filter === 'All' || s.type === filter);
 
-  // Navigation Items Config
   const navItems = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { id: 'chart', label: 'Chart', icon: LineChart },
@@ -53,6 +182,12 @@ const App: React.FC = () => {
     { id: 'calculator', label: 'Risk', icon: Calculator },
     { id: 'settings', label: 'Settings', icon: SettingsIcon },
   ];
+
+  const copyConfigFix = () => {
+      const fix = '"cors_allow_headers": ["ngrok-skip-browser-warning", "Authorization", "Content-Type"]';
+      navigator.clipboard.writeText(fix);
+      alert("Config line copied to clipboard!");
+  };
 
   return (
     <div className="min-h-screen bg-background text-slate-200 font-sans selection:bg-blue-500/30 pb-20 md:pb-0">
@@ -95,30 +230,121 @@ const App: React.FC = () => {
             <span className="font-bold text-lg text-slate-100">ClaudeBot</span>
          </div>
          <div className="text-[10px] font-mono text-slate-500 border border-slate-700 px-2 py-1 rounded">
-            {apiKey ? 'ONLINE' : 'DEMO'}
+            {apiKey ? 'API' : (botConnected ? 'BOT' : 'DEMO')}
          </div>
       </div>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6 md:py-8">
         
+        {/* Error Alert */}
+        {botError && (
+            <div className="mb-6 p-5 bg-rose-500/10 border border-rose-500/20 rounded-xl flex items-start gap-4 animate-fadeIn shadow-xl">
+                <AlertTriangle className="w-6 h-6 text-rose-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                    <h3 className="text-base font-bold text-rose-400 mb-2">Bot Connection Error</h3>
+                    <div className="text-sm text-rose-300/80 mb-5 whitespace-pre-wrap leading-relaxed font-mono bg-black/20 p-3 rounded-lg border border-rose-500/10">
+                        {botError}
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-3">
+                       {botError.includes("cors_allow_headers") && (
+                         <button 
+                           onClick={copyConfigFix}
+                           className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-lg"
+                         >
+                           <Copy className="w-3 h-3" />
+                           Copy Fix to Clipboard
+                         </button>
+                       )}
+
+                       {botConfig?.url.includes('ngrok') && (
+                        <a 
+                          href={botConfig.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-lg"
+                        >
+                          <LinkIcon className="w-3 h-3" />
+                          1. Open Bot URL (Bypass)
+                        </a>
+                       )}
+
+                       <button 
+                         onClick={() => {
+                             const url = botConfig?.url || 'https://emmett-telodynamic-daniele.ngrok-free.dev';
+                             const nextSkip = !botConfig?.skipNgrokHeader;
+                             handleSaveBot(url, botConfig?.user || 'minu', botConfig?.pass || 'Nuamparola123@', nextSkip);
+                             localStorage.setItem('bot_skip_ngrok_header', nextSkip.toString());
+                             window.location.reload();
+                         }}
+                         className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-2 shadow-lg"
+                       >
+                         <RefreshCw className="w-3 h-3" />
+                         Retry Connection
+                       </button>
+
+                       <button 
+                         onClick={() => setActiveView('settings')}
+                         className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-all flex items-center gap-2 border border-slate-700"
+                       >
+                         <SettingsIcon className="w-3 h-3" />
+                         Check Settings
+                       </button>
+                    </div>
+                </div>
+                <button onClick={() => setBotError(null)} className="p-1 hover:bg-white/5 rounded-full text-rose-400 hover:text-rose-300">
+                    <X className="w-5 h-5" />
+                </button>
+            </div>
+        )}
+
         {activeView === 'dashboard' && (
           <div className="animate-fadeIn space-y-6">
-            {/* Agent Control Buttons */}
-            <AgentControls />
+            
+            {botConnected && botProfit && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fadeIn">
+                    <div className="bg-slate-900/50 border border-slate-700 p-4 rounded-xl">
+                        <div className="text-xs text-slate-500 uppercase">Total Profit</div>
+                        <div className={`text-xl font-bold ${botProfit.profit_all_coin >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            {botProfit.profit_all_coin.toFixed(2)} USDT
+                        </div>
+                    </div>
+                    <div className="bg-slate-900/50 border border-slate-700 p-4 rounded-xl">
+                        <div className="text-xs text-slate-500 uppercase">Capital</div>
+                        <div className="text-xl font-bold text-blue-400">
+                            {botBalance ? botBalance.toFixed(2) : '---'} USDT
+                        </div>
+                    </div>
+                    <div className="bg-slate-900/50 border border-slate-700 p-4 rounded-xl">
+                        <div className="text-xs text-slate-500 uppercase">Win Rate</div>
+                        <div className="text-xl font-bold text-indigo-400">
+                            {(botProfit.winrate * 100).toFixed(1)}%
+                        </div>
+                    </div>
+                    <div className="bg-slate-900/50 border border-slate-700 p-4 rounded-xl">
+                        <div className="text-xs text-slate-500 uppercase">Total Trades</div>
+                        <div className="text-xl font-bold text-slate-200">
+                            {botProfit.trade_count}
+                        </div>
+                    </div>
+                </div>
+            )}
 
-            {/* Split Row: Market Sentiment & Agent Logs */}
+            <AgentControls onStartAuto={handleStartBot} onStopAuto={handleStopBot} isRunning={botConnected} />
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <MarketSentiment />
               <AgentLogs />
             </div>
 
-            {/* Welcome Banner */}
-             <div className="bg-gradient-to-r from-indigo-900/30 to-slate-900 border border-indigo-500/20 rounded-xl p-4 md:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="bg-gradient-to-r from-indigo-900/30 to-slate-900 border border-indigo-500/20 rounded-xl p-4 md:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                   <h2 className="text-lg md:text-xl font-bold text-white mb-1">Welcome back, Minu.</h2>
                   <p className="text-indigo-200 text-xs md:text-sm hidden md:block">
-                    {apiKey ? `Connected to Binance ${marketType}. Scanning for opportunities...` : 'Demo Mode Active. Connect API keys in Settings to sync with your personal account.'}
+                    {botConnected 
+                        ? `Connected to Claude Bot (${botConfig?.url}). AI Active.` 
+                        : (apiKey ? `Connected to Binance ${marketType}. Scanning for opportunities...` : 'Demo Mode Active. Connect Bot or API keys in Settings.')
+                    }
                   </p>
                 </div>
                 <button 
@@ -133,10 +359,13 @@ const App: React.FC = () => {
                 </button>
             </div>
 
-            {/* Open Trades Table (Live P&L) */}
-            <OpenTrades apiKey={apiKey} apiSecret={apiSecret} marketType={marketType} />
+            <OpenTrades 
+                apiKey={apiKey} 
+                apiSecret={apiSecret} 
+                marketType={marketType} 
+                externalTrades={botTrades || undefined} 
+            />
 
-            {/* Filter Tabs */}
             <div className="flex items-center gap-2 mb-2 overflow-x-auto pb-2 scrollbar-hide">
               <span className="text-slate-500 text-xs font-bold uppercase tracking-wider mr-2 shrink-0">Filter:</span>
               {(['All', 'Long', 'Short', 'Combined'] as const).map(f => (
@@ -154,7 +383,6 @@ const App: React.FC = () => {
               ))}
             </div>
 
-            {/* Strategies Grid */}
             <div id="strategies-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               {filteredStrategies.map(strategy => (
                 <StrategyCard 
@@ -164,12 +392,6 @@ const App: React.FC = () => {
                 />
               ))}
             </div>
-
-            {filteredStrategies.length === 0 && (
-              <div className="text-center py-20 text-slate-500">
-                <p>No strategies found for this filter.</p>
-              </div>
-            )}
           </div>
         )}
 
@@ -188,55 +410,29 @@ const App: React.FC = () => {
                 </div>
              </div>
              <TradingViewWidget />
-             
-             <div className="mt-6 grid grid-cols-2 md:grid-cols-3 gap-4">
-               <div className="bg-surface border border-slate-700 rounded-lg p-4">
-                  <h3 className="text-[10px] font-mono text-slate-500 mb-1 uppercase">Price</h3>
-                  <div className="text-lg md:text-xl font-bold text-slate-200">BTC/USDT</div>
-               </div>
-               <div className="bg-surface border border-slate-700 rounded-lg p-4">
-                  <h3 className="text-[10px] font-mono text-slate-500 mb-1 uppercase">Signal</h3>
-                  <div className="text-lg md:text-xl font-bold text-indigo-400">WAITING</div>
-               </div>
-               <div className="col-span-2 md:col-span-1 bg-surface border border-slate-700 rounded-lg p-4">
-                  <h3 className="text-[10px] font-mono text-slate-500 mb-1 uppercase">Interval</h3>
-                  <div className="text-lg md:text-xl font-bold text-slate-200">15m / 4h</div>
-               </div>
-             </div>
           </div>
         )}
 
         {activeView === 'statistics' && (
-          <Statistics />
+          <Statistics botTrades={botHistory} />
         )}
 
         {activeView === 'calculator' && (
           <div className="max-w-3xl mx-auto animate-fadeIn">
             <RiskCalculator />
-            
-            <div className="mt-8 p-6 border border-slate-700 rounded-xl bg-slate-900/50">
-              <h3 className="text-lg font-bold text-slate-200 mb-4">Risk Rules</h3>
-              <ul className="space-y-3 text-sm text-slate-400">
-                <li className="flex gap-2">
-                  <span className="text-indigo-400 font-bold">1.</span>
-                  Max risk 1-2% per trade.
-                </li>
-                <li className="flex gap-2">
-                  <span className="text-indigo-400 font-bold">2.</span>
-                  Always use Stop Loss.
-                </li>
-              </ul>
-            </div>
           </div>
         )}
 
         {activeView === 'settings' && (
-          <Settings onSave={handleSaveKeys} hasKeys={!!apiKey} />
+          <Settings 
+            onSave={handleSaveKeys} 
+            onSaveBot={handleSaveBot}
+            hasKeys={!!apiKey || !!botConfig} 
+          />
         )}
 
       </main>
 
-      {/* Mobile Bottom Navigation */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-surface/95 backdrop-blur-xl border-t border-slate-700/50 z-50 pb-safe">
         <div className="flex justify-around items-center h-16">
           {navItems.map((item) => (
@@ -254,7 +450,6 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Modal */}
       {selectedStrategy && (
         <StrategyViewer 
           strategy={selectedStrategy} 

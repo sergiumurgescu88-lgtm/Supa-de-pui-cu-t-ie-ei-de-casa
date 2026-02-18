@@ -120,31 +120,6 @@ export const STRATEGIES: Strategy[] = [
     ]
   },
   {
-    id: 'long-5',
-    name: 'Smart Combo Score',
-    type: 'Combined',
-    difficulty: 5,
-    description: 'Advanced voting system using 8 indicators. Reduces false signals significantly.',
-    winRate: '60-70%',
-    tradesPerDay: '3-8',
-    tags: ['Expert', 'Scoring System', 'Robust'],
-    logic: 'SCORE: +2 EMA Trend, +2 RSI, +1 MACD, +1 Volume, +1 BB, +1 ADX.\nENTRY: Score >= 7/10.',
-    code: `class SmartComboScore(IStrategy):
-    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe.loc[
-            (
-                (dataframe["buy_score"] >= self.min_score.value) &
-                (dataframe["close"] > dataframe["open"])
-            ),
-            "enter_long"
-        ] = 1
-        return dataframe`,
-    parameters: [
-      { key: 'min_score', label: 'Minimum Buy Score', type: 'number', defaultValue: 7, min: 1, max: 10, step: 1 },
-      { key: 'adx_threshold', label: 'ADX Trend Strength', type: 'number', defaultValue: 25, min: 10, max: 50 }
-    ]
-  },
-  {
     id: 'short-1',
     name: 'RSI Short Reversion',
     type: 'Short',
@@ -169,6 +144,31 @@ export const STRATEGIES: Strategy[] = [
       { key: 'rsi_overbought', label: 'RSI Overbought', type: 'number', defaultValue: 70, min: 50, max: 90 },
       { key: 'bb_period', label: 'Bollinger Band Period', type: 'number', defaultValue: 20 },
       { key: 'stoch_threshold', label: 'Stoch K Threshold', type: 'number', defaultValue: 80 }
+    ]
+  },
+  {
+    id: 'short-4',
+    name: 'MACD Bearish Cross',
+    type: 'Short',
+    difficulty: 2,
+    description: 'Momentum reversal strategy. Enters short on MACD bearish crossover in overbought conditions.',
+    winRate: '52-58%',
+    tradesPerDay: '3-6',
+    tags: ['Momentum', 'MACD', 'Intermediate'],
+    logic: 'ENTRY: MACD Line crosses below Signal Line AND MACD > 0 AND RSI > 60.',
+    code: `class MACD_Bearish_Crossover(IStrategy):
+    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe.loc[
+            (
+                qtpylib.crossed_below(dataframe['macd'], dataframe['macdsignal']) &
+                (dataframe['macd'] > 0) &
+                (dataframe['rsi'] > 60)
+            ),
+            "enter_short"
+        ] = 1
+        return dataframe`,
+    parameters: [
+      { key: 'rsi_threshold', label: 'RSI Filter', type: 'number', defaultValue: 60, min: 50, max: 80 }
     ]
   },
   {
@@ -197,6 +197,32 @@ export const STRATEGIES: Strategy[] = [
       { key: 'ema_fast', label: 'Death Cross Fast EMA', type: 'number', defaultValue: 50 },
       { key: 'ema_slow', label: 'Death Cross Slow EMA', type: 'number', defaultValue: 200 },
       { key: 'vol_mult', label: 'Volume Spike Ratio', type: 'number', defaultValue: 1.5, step: 0.1 }
+    ]
+  },
+  {
+    id: 'short-5',
+    name: 'Bear Flag Continuation',
+    type: 'Short',
+    difficulty: 4,
+    description: 'Identifies bear flag patterns and enters on the breakdown of the flag support.',
+    winRate: '58-64%',
+    tradesPerDay: '1-3',
+    tags: ['Price Action', 'Continuation', 'Bearish'],
+    logic: 'ENTRY: Trend is Bearish AND Flag Consolidation Detected AND Price breaks below Flag Low on High Volume.',
+    code: `class BearFlag_Continuation_Short(IStrategy):
+    def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        dataframe.loc[
+            (
+                (dataframe["adx"] > 25) &
+                (dataframe["close"] < dataframe["ema_20"]) &
+                (dataframe["close"] < dataframe["flag_low"]) &
+                (dataframe["volume"] > dataframe["volume_mean"])
+            ),
+            "enter_short"
+        ] = 1
+        return dataframe`,
+    parameters: [
+      { key: 'adx_min', label: 'Min ADX (Trend Strength)', type: 'number', defaultValue: 25, min: 10, max: 50 }
     ]
   },
   {

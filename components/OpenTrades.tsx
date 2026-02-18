@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { TrendingUp, TrendingDown, X, Activity, RefreshCw, AlertCircle, Wallet } from 'lucide-react';
 import { BinanceService, MarketType } from '../services/binance';
+import { BotTrade } from '../services/freqtrade';
 
 interface Trade {
   id: string;
@@ -25,9 +26,10 @@ interface OpenTradesProps {
   apiKey?: string;
   apiSecret?: string;
   marketType?: MarketType;
+  externalTrades?: BotTrade[]; // Optional prop for Bot data
 }
 
-const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType = 'Futures' }) => {
+const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType = 'Futures', externalTrades }) => {
   const [trades, setTrades] = useState<Trade[]>(INITIAL_TRADES);
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
@@ -36,8 +38,26 @@ const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType =
   const wsRef = useRef<WebSocket | null>(null);
   const intervalRef = useRef<number | null>(null);
 
-  // Effect to switch mode and fetch initial API data
+  // Effect to sync external trades if provided
   useEffect(() => {
+    if (externalTrades) {
+      const mappedTrades: Trade[] = externalTrades.map(t => ({
+        id: t.trade_id.toString(),
+        pair: t.pair,
+        type: t.is_short ? 'Short' : 'Long',
+        entry: t.open_rate,
+        size: t.stake_amount, // Use stake as size
+        leverage: 1, // Bot might not expose leverage directly in status, assume 1 or user configured
+        stopLoss: 0,
+        pnl: t.profit_abs,
+        market: 'Futures'
+      }));
+      setTrades(mappedTrades);
+      setIsApiMode(true); // Treat as connected
+      return;
+    }
+
+    // Existing Logic for Binance/Mock
     if (apiKey && apiSecret) {
       setIsApiMode(true);
       setTrades([]); // Clear mock data
@@ -53,7 +73,7 @@ const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType =
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [apiKey, apiSecret, marketType]);
+  }, [apiKey, apiSecret, marketType, externalTrades]);
 
   const fetchBinancePositions = async () => {
     if (!apiKey || !apiSecret) return;
@@ -118,19 +138,20 @@ const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType =
   };
 
   const calculatePnL = (trade: Trade, currentPrice: number) => {
+    // If PnL is provided externally (e.g. from Bot or Binance API), use it
+    if (isApiMode && trade.pnl !== undefined) {
+      const pnlValue = trade.pnl;
+      // Approx percent for display
+      const margin = trade.size / trade.leverage; 
+      const pnlPercent = margin > 0 ? (pnlValue / margin) * 100 : 0;
+      return { pnlValue, pnlPercent, isSpot: false };
+    }
+
     // Spot Mode PnL: just Value - (Entry * Size) if we had entry. 
     // Since we don't have entry history easily in Spot API, we show Total Value
     if (trade.market === 'Spot') {
       const value = (trade.amount || 0) * currentPrice;
       return { pnlValue: value, pnlPercent: 0, isSpot: true };
-    }
-
-    // Futures Mode
-    if (isApiMode && trade.pnl !== undefined) {
-      const pnlValue = trade.pnl;
-      const margin = trade.size / trade.leverage; 
-      const pnlPercent = margin > 0 ? (pnlValue / margin) * 100 : 0;
-      return { pnlValue, pnlPercent, isSpot: false };
     }
 
     // Mock Mode
@@ -155,7 +176,7 @@ const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType =
         <div className="flex items-center gap-2">
           {marketType === 'Spot' ? <Wallet className="w-4 h-4 md:w-5 md:h-5 text-purple-400" /> : <Activity className="w-4 h-4 md:w-5 md:h-5 text-blue-400" />}
           <h3 className="font-bold text-sm md:text-base text-slate-100">
-            {isApiMode ? `Binance ${marketType}` : 'Active Trades'}
+            {externalTrades ? 'Claude Bot Trades' : (isApiMode ? `Binance ${marketType}` : 'Active Trades')}
           </h3>
           <span className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 text-[10px] md:text-xs font-bold border border-blue-500/20">
             {trades.length}
@@ -176,7 +197,7 @@ const OpenTrades: React.FC<OpenTradesProps> = ({ apiKey, apiSecret, marketType =
       <div className="overflow-x-auto">
         {trades.length === 0 ? (
            <div className="p-6 md:p-8 text-center text-slate-500 text-xs md:text-sm">
-             {isApiMode ? `No ${marketType} positions found.` : 'No active trades.'}
+             {isApiMode ? (externalTrades ? 'No active bot trades.' : `No ${marketType} positions found.`) : 'No active trades.'}
            </div>
         ) : (
           <table className="w-full text-left border-collapse min-w-[350px]">
